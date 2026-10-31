@@ -70,6 +70,10 @@ jobs:
           ccache --max-size=2G
           ccache -z
 
+          git -C external/fex submodule update --init --recursive \
+            External/fmt External/range-v3 External/rpmalloc \
+            External/unordered_dense External/xxhash Source/Common/cpp-optparse
+
           DEPS="$GITHUB_WORKSPACE/native-deps"
           mkdir -p "$DEPS/root/subprojects"
 
@@ -92,6 +96,10 @@ jobs:
           git -C "$DEPS/adrenotools" submodule update --init --recursive
           git -C "$DEPS/adrenotools" apply \
             "$GITHUB_WORKSPACE/tools/native/adrenotools-kgsl-context-priority.patch"
+
+          git clone --filter=blob:none \
+            https://gitlab.freedesktop.org/slirp/libslirp.git "$DEPS/libslirp"
+          git -C "$DEPS/libslirp" checkout --detach 26be815b
 
           NV2A_DIR="$DEPS/root/subprojects/nv2a_vsh_cpu"
           mkdir -p "$NV2A_DIR"
@@ -123,7 +131,7 @@ jobs:
         with:
           cache-read-only: ${{ github.ref != 'refs/heads/main' }}
 
-      - name: Build APK
+      - name: Build signed APK
         shell: bash
         run: |
           set -euo pipefail
