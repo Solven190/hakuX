@@ -61,6 +61,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+
+          sudo apt-get update
+          sudo apt-get install -y ccache
+
           export PATH="/usr/lib/ccache:$PATH"
           echo "PATH=/usr/lib/ccache:$PATH" >> "$GITHUB_ENV"
           ccache --max-size=2G
