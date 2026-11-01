@@ -1,4 +1,4 @@
-package com.rfandango.haku_x.ui.library
+package com.rfandango.haku_x.ui.library.cover
 
 import android.content.ContentResolver
 import android.content.Context
