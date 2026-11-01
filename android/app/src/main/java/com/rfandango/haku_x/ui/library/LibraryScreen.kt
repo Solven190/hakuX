@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -34,9 +35,11 @@ import androidx.compose.foundation.text.input.TextFieldLineLimits
 import androidx.compose.foundation.text.input.rememberTextFieldState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Build
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Star
@@ -44,11 +47,13 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
@@ -136,8 +141,16 @@ fun LibraryScreen(
   val update by Updates.available.collectAsStateWithLifecycle()
   var updateDialog by remember { mutableStateOf(false) }
   var dashboardAsk by remember { mutableStateOf(false) }
+  var viewDialog by remember { mutableStateOf(false) }
+  // The game a cover is being picked for (the image picker is open).
+  var coverFor by remember { mutableStateOf<Game?>(null) }
   val pickDashboard = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
     if (uri != null) vm.installDashboard(uri)
+  }
+  val pickCover = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
+    val game = coverFor
+    coverFor = null
+    if (uri != null && game != null) vm.setCover(game, uri)
   }
   LifecycleResumeEffect(Unit) {
     vm.onResume()
@@ -146,6 +159,11 @@ fun LibraryScreen(
 
   Scaffold { padding ->
     Column(Modifier.padding(padding).fillMaxSize()) {
+      Text(
+        stringResource(R.string.library_title),
+        style = MaterialTheme.typography.headlineMedium,
+        modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp),
+      )
       // No title bar: the dashboard button, the search field and the settings button share the top row.
       Row(
         Modifier.fillMaxWidth().padding(start = 4.dp, end = 4.dp, top = 8.dp),
@@ -170,8 +188,9 @@ fun LibraryScreen(
           }
         }
         // the folders listed again, as a pull does (a controller can't pull)
-        IconButton(onClick = vm::refresh, modifier = Modifier.padding(start = 4.dp)) {
-          Icon(Icons.Filled.Refresh, contentDescription = stringResource(R.string.library_refresh))
+        // (the button is gone: the pull alone lists them again)
+        IconButton(onClick = { viewDialog = true }, modifier = Modifier.padding(start = 4.dp)) {
+          Icon(Icons.Filled.List, contentDescription = stringResource(R.string.library_view_options))
         }
         IconButton(onClick = onOpenSettings) {
           Icon(Icons.Filled.Settings, contentDescription = stringResource(R.string.settings_title))
@@ -191,7 +210,15 @@ fun LibraryScreen(
             TextButton(onClick = onOpenSettings) { Text(stringResource(R.string.settings_games_folder_title)) }
           }
           games.isEmpty() -> Message(stringResource(R.string.library_empty_games))
-          else -> GameList(games, state.info, state.icons, onLaunch, onGameSettings, onLoadState, onMods, vm::askConvert)
+          else -> GameList(
+            games, state.info, state.icons, state.covers, state.grid, state.showInfo,
+            onLaunch, onGameSettings, onLoadState, onMods, vm::askConvert,
+            onPickCover = { game ->
+              coverFor = game
+              pickCover.launch("image/*")
+            },
+            onRemoveCover = vm::removeCover,
+          )
         }
       }
     }
@@ -206,6 +233,15 @@ fun LibraryScreen(
   if (updateDialog) {
     update?.let { UpdateDialog(it, onDismiss = { updateDialog = false }) }
   }
+  if (viewDialog) {
+    ViewDialog(
+      grid = state.grid,
+      showInfo = state.showInfo,
+      onGrid = vm::setGrid,
+      onShowInfo = vm::setShowInfo,
+      onDismiss = { viewDialog = false },
+    )
+  }
   if (dashboardAsk) {
     ConfirmDialog(
       title = stringResource(R.string.library_dashboard_install_title),
@@ -219,6 +255,50 @@ fun LibraryScreen(
     )
   }
   state.dashboardInstall?.let { DashboardInstallDialog(it, onStart = onDashboard, onDismiss = vm::dismissDashboardInstall) }
+}
+
+/** How the library looks: grid or list, and the cards' name and ID shown or not. */
+@Composable
+private fun ViewDialog(
+  grid: Boolean,
+  showInfo: Boolean,
+  onGrid: (Boolean) -> Unit,
+  onShowInfo: (Boolean) -> Unit,
+  onDismiss: () -> Unit,
+) {
+  AlertDialog(
+    onDismissRequest = onDismiss,
+    title = { Text(stringResource(R.string.library_view_title)) },
+    text = {
+      Column {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+          FilterChip(
+            selected = grid,
+            onClick = { onGrid(true) },
+            label = { Text(stringResource(R.string.library_view_grid)) },
+          )
+          FilterChip(
+            selected = !grid,
+            onClick = { onGrid(false) },
+            label = { Text(stringResource(R.string.library_view_list)) },
+          )
+        }
+        Spacer(Modifier.height(16.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+          Column(Modifier.weight(1f).padding(end = 12.dp)) {
+            Text(stringResource(R.string.library_show_info), style = MaterialTheme.typography.bodyLarge)
+            Text(
+              stringResource(R.string.library_show_info_desc),
+              style = MaterialTheme.typography.bodySmall,
+              color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+          }
+          Switch(checked = showInfo, onCheckedChange = onShowInfo)
+        }
+      }
+    },
+    confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(android.R.string.ok)) } },
+  )
 }
 
 /** The dashboard's install from its zip: its progress, then installed (to start now) or why not. */
@@ -269,6 +349,11 @@ private fun DashboardInstallDialog(j: DashboardInstall, onStart: () -> Unit, onD
  * by every card, and the long-press menu composed only while it is open.
  * With a controller the focused card is outlined in green; A starts its game,
  * Y or select (or holding A) opens its menu.
+ *
+ * Grid (the default) shows each game as a cover, in the proportions of an
+ * original Xbox case: the cover the user picked, else the disc's icon. List
+ * keeps the rows. The name and ID under a cover (the ID line in a list) show
+ * when the library's view says so.
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -276,11 +361,16 @@ private fun GameList(
   games: List<Game>,
   info: Map<Uri, DiscInfo>,
   icons: Map<Uri, ImageBitmap>,
+  covers: Map<Uri, ImageBitmap>,
+  grid: Boolean,
+  showInfo: Boolean,
   onLaunch: (Game) -> Unit,
   onGameSettings: (Game, DiscInfo?) -> Unit,
   onLoadState: (Game, SaveStateStore, Int) -> Unit,
   onMods: (Game, DiscInfo) -> Unit,
   onConvert: (Game) -> Unit,
+  onPickCover: (Game) -> Unit,
+  onRemoveCover: (Game) -> Unit,
 ) {
   // The game whose long-press menu is open.
   var menuFor by remember { mutableStateOf<Uri?>(null) }
@@ -294,52 +384,68 @@ private fun GameList(
   val shape = remember { RoundedCornerShape(12.dp) }
   val iconShape = ThumbnailShape
   val titleStyle = MaterialTheme.typography.titleMedium.copy(color = colors.onSurface)
+  val coverTitleStyle = MaterialTheme.typography.titleSmall.copy(color = colors.onSurface)
   val idStyle = SMALL_PRINT.copy(fontFamily = FontFamily.Monospace, color = colors.onSurfaceVariant)
   LazyVerticalGrid(
-    columns = GridCells.Fixed(if (landscape) 2 else 1),
+    columns = if (grid) GridCells.Adaptive(130.dp) else GridCells.Fixed(if (landscape) 2 else 1),
     modifier = Modifier.fillMaxSize(),
     contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 16.dp),
     horizontalArrangement = Arrangement.spacedBy(8.dp),
-    verticalArrangement = Arrangement.spacedBy(6.dp),
+    verticalArrangement = Arrangement.spacedBy(if (grid) 8.dp else 6.dp),
   ) {
     items(games, key = { it.uri.toString() }) { game ->
       val disc = info[game.uri]
+      val cover = covers[game.uri]
       var focused by remember { mutableStateOf(false) }
       Box {
-        Row(
-          Modifier
-            .fillMaxWidth()
-            .clip(shape)
-            .background(colors.surface)
-            .border(if (focused) 2.dp else 1.dp, if (focused) colors.primary else colors.outlineVariant, shape)
-            .onFocusChanged { focused = it.isFocused }
-            // a controller's Y, or its select (sent as Menu), opens the menu
-            .onKeyEvent { e ->
-              if (e.key != Key.ButtonY && e.key != Key.Menu) return@onKeyEvent false
-              if (e.type == KeyEventType.KeyUp) menuFor = game.uri
-              true
+        val card = Modifier
+          .fillMaxWidth()
+          .clip(shape)
+          .background(colors.surface)
+          .border(if (focused) 2.dp else 1.dp, if (focused) colors.primary else colors.outlineVariant, shape)
+          .onFocusChanged { focused = it.isFocused }
+          // a controller's Y, or its select (sent as Menu), opens the menu
+          .onKeyEvent { e ->
+            if (e.key != Key.ButtonY && e.key != Key.Menu) return@onKeyEvent false
+            if (e.type == KeyEventType.KeyUp) menuFor = game.uri
+            true
+          }
+          .combinedClickable(
+            onClick = { onLaunch(game) },
+            onLongClick = {
+              haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+              menuFor = game.uri
+            },
+          )
+        if (grid) {
+          Column(card) {
+            CoverTile(game, cover, icons[game.uri], showInfo, iconShape, colors.surfaceVariant, colors.onSurfaceVariant)
+            if (showInfo) {
+              Column(Modifier.padding(start = 8.dp, end = 8.dp, top = 6.dp, bottom = 8.dp)) {
+                Text(game.title, style = coverTitleStyle, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                if (disc != null && disc.titleId != 0L) {
+                  IdLine(disc, idStyle)
+                }
+              }
             }
-            .combinedClickable(
-              onClick = { onLaunch(game) },
-              onLongClick = {
-                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                menuFor = game.uri
-              },
-            )
-            .padding(start = 8.dp, end = 12.dp, top = 8.dp, bottom = 8.dp),
-          verticalAlignment = Alignment.CenterVertically,
-        ) {
-          TitleIcon(game, icons[game.uri], iconShape, colors.surfaceVariant, colors.onSurfaceVariant)
-          Column(Modifier.weight(1f).padding(start = 12.dp, end = 8.dp)) {
-            // Landscape's two columns are narrow: one line, cut to fit.
-            Text(
-              game.title,
-              style = titleStyle,
-              maxLines = if (landscape) 1 else Int.MAX_VALUE,
-              overflow = TextOverflow.Ellipsis,
-            )
-            if (disc != null && disc.titleId != 0L) {
-              IdLine(disc, idStyle)
+          }
+        } else {
+          Row(
+            card.padding(start = 8.dp, end = 12.dp, top = 8.dp, bottom = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+          ) {
+            TitleIcon(game, cover ?: icons[game.uri], iconShape, colors.surfaceVariant, colors.onSurfaceVariant)
+            Column(Modifier.weight(1f).padding(start = 12.dp, end = 8.dp)) {
+              // Landscape's two columns are narrow: one line, cut to fit.
+              Text(
+                game.title,
+                style = titleStyle,
+                maxLines = if (landscape) 1 else Int.MAX_VALUE,
+                overflow = TextOverflow.Ellipsis,
+              )
+              if (showInfo && disc != null && disc.titleId != 0L) {
+                IdLine(disc, idStyle)
+              }
             }
           }
         }
@@ -360,6 +466,24 @@ private fun GameList(
                 onGameSettings(game, disc)
               },
             )
+            DropdownMenuItem(
+              text = { Text(stringResource(R.string.library_menu_cover)) },
+              leadingIcon = { Icon(Icons.Filled.Edit, contentDescription = null) },
+              onClick = {
+                menuFor = null
+                onPickCover(game)
+              },
+            )
+            if (cover != null) {
+              DropdownMenuItem(
+                text = { Text(stringResource(R.string.library_menu_cover_remove)) },
+                leadingIcon = { Icon(Icons.Filled.Delete, contentDescription = null) },
+                onClick = {
+                  menuFor = null
+                  onRemoveCover(game)
+                },
+              )
+            }
             if (hasStates) {
               DropdownMenuItem(
                 text = { Text(stringResource(R.string.library_menu_load_state)) },
@@ -406,6 +530,56 @@ private fun GameList(
       },
       onDismiss = { statesFor = null },
     )
+  }
+}
+
+/** The proportions of an original Xbox case's front: 5 wide to 7 tall. */
+private const val COVER_RATIO = 5f / 7f
+
+/**
+ * A game's cover in the grid: the cover the user picked, filling the tile; else the disc's icon,
+ * with the title when the name isn't shown under the tile.
+ */
+@Composable
+private fun CoverTile(
+  game: Game,
+  cover: ImageBitmap?,
+  icon: ImageBitmap?,
+  showInfo: Boolean,
+  iconShape: Shape,
+  background: Color,
+  onBackground: Color,
+) {
+  Box(
+    Modifier.fillMaxWidth().aspectRatio(COVER_RATIO).background(background),
+    contentAlignment = Alignment.Center,
+  ) {
+    if (cover != null) {
+      Image(
+        cover,
+        contentDescription = game.title,
+        contentScale = ContentScale.Crop,
+        modifier = Modifier.fillMaxSize(),
+      )
+    } else {
+      Column(
+        Modifier.padding(8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+      ) {
+        TitleIcon(game, icon, iconShape, Color.Transparent, onBackground)
+        if (!showInfo) {
+          Text(
+            game.title,
+            style = MaterialTheme.typography.labelMedium,
+            color = onBackground,
+            textAlign = TextAlign.Center,
+            maxLines = 3,
+            overflow = TextOverflow.Ellipsis,
+          )
+        }
+      }
+    }
   }
 }
 
@@ -558,7 +732,7 @@ private fun TitleIcon(game: Game, icon: ImageBitmap?, shape: Shape, background: 
 @Composable
 private fun SearchField(query: String, onQueryChange: (String) -> Unit, modifier: Modifier = Modifier) {
   val interaction = remember { MutableInteractionSource() }
-  val shape = RoundedCornerShape(22.dp)
+  val shape = RoundedCornerShape(24.dp)
   val state = rememberTextFieldState(query)
   val change by rememberUpdatedState(onQueryChange)
   LaunchedEffect(state) {
@@ -571,7 +745,7 @@ private fun SearchField(query: String, onQueryChange: (String) -> Unit, modifier
   BasicTextField(
     state = state,
     modifier = modifier
-      .height(44.dp)
+      .height(48.dp)
       .onFocusChanged { if (!it.isFocused) typing = false }
       .onPreviewKeyEvent { e ->
         val direction = when (e.key) {
@@ -619,8 +793,15 @@ private fun SearchDecoration(
     placeholder = {
       Text(stringResource(R.string.library_search_hint), style = MaterialTheme.typography.bodyMedium)
     },
-    leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null, modifier = Modifier.size(20.dp)) },
-    contentPadding = PaddingValues(start = 4.dp, end = 16.dp),
+    leadingIcon = {
+      Icon(
+        Icons.Filled.Search,
+        contentDescription = null,
+        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.size(22.dp),
+      )
+    },
+    contentPadding = PaddingValues(start = 0.dp, end = 16.dp),
     container = {
       OutlinedTextFieldDefaults.Container(
         enabled = true,
