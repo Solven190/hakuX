@@ -20,7 +20,7 @@
     android:roundIcon="@mipmap/ic_launcher_round"
     android:allowBackup="false"
     android:appCategory="game"
-    android:supportsRtl="true"
+    android:supportsRtl="false"
     android:theme="@style/Theme.HakuX">
 
     <!-- The app's screens (Compose) and the entry for frontends' launches.
