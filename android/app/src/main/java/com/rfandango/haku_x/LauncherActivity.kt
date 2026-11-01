@@ -12,7 +12,10 @@ import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.unit.LayoutDirection
 import com.rfandango.haku_x.data.AppPrefs
 import com.rfandango.haku_x.data.Game
 import com.rfandango.haku_x.data.PreviousVersion
@@ -66,39 +69,42 @@ class LauncherActivity : ComponentActivity() {
         }
       }
       HakuXTheme(dark) {
-        HakuXApp(
-          needsMigration = needsMigration,
-          needsSetup = !folderReady,
-          onLaunchGame = { game: Game ->
-            Log.i(TAG, "launch: path=${game.relativePath} uri=${game.uri} size=${game.sizeBytes}")
-            Storage.persistPermission(this, game.uri)
-            startCore(game.uri, game.relativePath, game.title, launchedExternally = false)
-          },
-          onLaunchState = { game: Game, store: SaveStateStore, slot: Int ->
-            Log.i(TAG, "launch: path=${game.relativePath} into savestate slot $slot")
-            Storage.persistPermission(this, game.uri)
-            /* the state's frame on screen while the core starts (NativeCoreActivity holds it) */
-            val held = RelaunchActivity.heldFrame(this)
-            runCatching { store.thumb(slot).copyTo(held, overwrite = true) }.onFailure { held.delete() }
-            startCore(game.uri, game.relativePath, game.title, launchedExternally = false,
-                      state = store.state(slot).absolutePath)
-          },
-          onLaunchDashboard = {
-            Log.i(TAG, "launch: the dashboard")
-            /* not remembered as the last game: no disc */
-            startActivity(Intent(this, NativeCoreActivity::class.java)
-              .putExtra(NativeCoreActivity.EXTRA_DVD_URI, Dashboard.URI))
-            finish()
-          },
-          onLaunchSetup = { uri: Uri ->
-            Log.i(TAG, "launch: $uri (Insignia's setup)")
-            /* not a library game: not remembered as the last one */
-            startActivity(Intent(this, NativeCoreActivity::class.java)
-              .putExtra(NativeCoreActivity.EXTRA_DVD_URI, uri.toString()))
-            finish()
-          },
-          openInsignia = openInsignia,
-        )
+        // the layout is left to right whatever the phone's language (an Arabic phone included)
+        CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+          HakuXApp(
+            needsMigration = needsMigration,
+            needsSetup = !folderReady,
+            onLaunchGame = { game: Game ->
+              Log.i(TAG, "launch: path=${game.relativePath} uri=${game.uri} size=${game.sizeBytes}")
+              Storage.persistPermission(this, game.uri)
+              startCore(game.uri, game.relativePath, game.title, launchedExternally = false)
+            },
+            onLaunchState = { game: Game, store: SaveStateStore, slot: Int ->
+              Log.i(TAG, "launch: path=${game.relativePath} into savestate slot $slot")
+              Storage.persistPermission(this, game.uri)
+              /* the state's frame on screen while the core starts (NativeCoreActivity holds it) */
+              val held = RelaunchActivity.heldFrame(this)
+              runCatching { store.thumb(slot).copyTo(held, overwrite = true) }.onFailure { held.delete() }
+              startCore(game.uri, game.relativePath, game.title, launchedExternally = false,
+                        state = store.state(slot).absolutePath)
+            },
+            onLaunchDashboard = {
+              Log.i(TAG, "launch: the dashboard")
+              /* not remembered as the last game: no disc */
+              startActivity(Intent(this, NativeCoreActivity::class.java)
+                .putExtra(NativeCoreActivity.EXTRA_DVD_URI, Dashboard.URI))
+              finish()
+            },
+            onLaunchSetup = { uri: Uri ->
+              Log.i(TAG, "launch: $uri (Insignia's setup)")
+              /* not a library game: not remembered as the last one */
+              startActivity(Intent(this, NativeCoreActivity::class.java)
+                .putExtra(NativeCoreActivity.EXTRA_DVD_URI, uri.toString()))
+              finish()
+            },
+            openInsignia = openInsignia,
+          )
+        }
       }
     }
   }
