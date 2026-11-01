@@ -81,7 +81,7 @@ private enum class SettingsTab(val title: Int) {
 
 /** A rounded, outlined group of settings under a coloured title. */
 @Composable
-private fun SettingsCard(title: String?, content: @Composable ColumnScope.() -> Unit) {
+internal fun SettingsCard(title: String?, content: @Composable ColumnScope.() -> Unit) {
   OutlinedCard(Modifier.fillMaxWidth(), shape = RoundedCornerShape(28.dp)) {
     Column(Modifier.padding(vertical = 12.dp)) {
       if (title != null) {
