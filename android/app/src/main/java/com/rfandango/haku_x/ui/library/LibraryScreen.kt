@@ -47,6 +47,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -159,27 +160,21 @@ fun LibraryScreen(
 
   Scaffold { padding ->
     Column(Modifier.padding(padding).fillMaxSize()) {
-      Text(
-        stringResource(R.string.library_title),
-        style = MaterialTheme.typography.headlineMedium,
-        modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp),
-      )
       // No title bar: the dashboard button, the search field and the settings button share the top row.
+      // (the buttons now sit across from the Library title, and the search field has a row of its own)
       Row(
-        Modifier.fillMaxWidth().padding(start = 4.dp, end = 4.dp, top = 8.dp),
+        Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
       ) {
-        // the dashboard (Xbox Live's accounts): started, or installed from its zip first
-        IconButton(
-          onClick = { if (state.dashboard) onDashboard() else dashboardAsk = true },
-          modifier = Modifier.padding(end = 4.dp),
-        ) {
-          Icon(Icons.Filled.Home, contentDescription = stringResource(R.string.library_dashboard))
-        }
-        SearchField(state.query, vm::setQuery, Modifier.weight(1f))
+        Text(
+          stringResource(R.string.library_title),
+          style = MaterialTheme.typography.headlineMedium,
+          modifier = Modifier.weight(1f),
+        )
         // a newer release found by a check: its notes and download
         if (update != null) {
-          IconButton(onClick = { updateDialog = true }, modifier = Modifier.padding(start = 4.dp)) {
+          FilledTonalIconButton(onClick = { updateDialog = true }) {
             Icon(
               painterResource(R.drawable.ic_update),
               contentDescription = stringResource(R.string.update_available_icon),
@@ -187,15 +182,24 @@ fun LibraryScreen(
             )
           }
         }
+        // the dashboard (Xbox Live's accounts): started, or installed from its zip first
+        FilledTonalIconButton(onClick = { if (state.dashboard) onDashboard() else dashboardAsk = true }) {
+          Icon(Icons.Filled.Home, contentDescription = stringResource(R.string.library_dashboard))
+        }
         // the folders listed again, as a pull does (a controller can't pull)
         // (the button is gone: the pull alone lists them again)
-        IconButton(onClick = { viewDialog = true }, modifier = Modifier.padding(start = 4.dp)) {
+        FilledTonalIconButton(onClick = { viewDialog = true }) {
           Icon(Icons.Filled.List, contentDescription = stringResource(R.string.library_view_options))
         }
-        IconButton(onClick = onOpenSettings) {
+        FilledTonalIconButton(onClick = onOpenSettings) {
           Icon(Icons.Filled.Settings, contentDescription = stringResource(R.string.settings_title))
         }
       }
+      SearchField(
+        state.query,
+        vm::setQuery,
+        Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 12.dp),
+      )
       // The pull's indicator follows the refresh (under the loading dialog):
       // it only goes once isRefreshing has been true.
       PullToRefreshBox(
@@ -387,7 +391,7 @@ private fun GameList(
   val coverTitleStyle = MaterialTheme.typography.titleSmall.copy(color = colors.onSurface)
   val idStyle = SMALL_PRINT.copy(fontFamily = FontFamily.Monospace, color = colors.onSurfaceVariant)
   LazyVerticalGrid(
-    columns = if (grid) GridCells.Adaptive(130.dp) else GridCells.Fixed(if (landscape) 2 else 1),
+    columns = if (grid) GridCells.Adaptive(100.dp) else GridCells.Fixed(if (landscape) 2 else 1),
     modifier = Modifier.fillMaxSize(),
     contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 16.dp),
     horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -745,7 +749,7 @@ private fun SearchField(query: String, onQueryChange: (String) -> Unit, modifier
   BasicTextField(
     state = state,
     modifier = modifier
-      .height(48.dp)
+      .height(42.dp)
       .onFocusChanged { if (!it.isFocused) typing = false }
       .onPreviewKeyEvent { e ->
         val direction = when (e.key) {
