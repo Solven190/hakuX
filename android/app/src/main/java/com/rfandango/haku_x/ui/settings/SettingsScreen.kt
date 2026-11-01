@@ -9,17 +9,27 @@ import android.text.format.DateUtils
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.ListItem
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -27,10 +37,12 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
 import com.rfandango.haku_x.BuildConfig
 import com.rfandango.haku_x.GpuDriverHelper
 import com.rfandango.haku_x.NativeCoreActivity
@@ -45,7 +57,6 @@ import com.rfandango.haku_x.ui.common.ChoiceDialog
 import com.rfandango.haku_x.ui.common.ConfirmDialog
 import com.rfandango.haku_x.ui.common.DeleteButton
 import com.rfandango.haku_x.ui.common.Hint
-import com.rfandango.haku_x.ui.common.Section
 import com.rfandango.haku_x.ui.common.SubScreen
 import com.rfandango.haku_x.ui.common.SwitchItem
 import com.rfandango.haku_x.ui.common.notify
@@ -57,6 +68,34 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.Calendar
 import java.util.GregorianCalendar
+
+/** The settings' tabs, each one a row in the chip bar at the top. */
+private enum class SettingsTab(val title: Int) {
+  GRAPHICS(R.string.settings_section_graphics),
+  DISPLAY(R.string.settings_section_display),
+  CONSOLE(R.string.settings_section_console),
+  CONTROLS(R.string.settings_section_controls),
+  GAMES(R.string.settings_section_games),
+  UPDATES(R.string.settings_section_updates),
+}
+
+/** A rounded, outlined group of settings under a coloured title. */
+@Composable
+private fun SettingsCard(title: String?, content: @Composable ColumnScope.() -> Unit) {
+  OutlinedCard(Modifier.fillMaxWidth(), shape = RoundedCornerShape(28.dp)) {
+    Column(Modifier.padding(vertical = 12.dp)) {
+      if (title != null) {
+        Text(
+          title,
+          style = MaterialTheme.typography.titleMedium,
+          color = MaterialTheme.colorScheme.primary,
+          modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+        )
+      }
+      content()
+    }
+  }
+}
 
 /** What the core reads at game start, plus the games folders the library scans. */
 @Composable
@@ -76,6 +115,10 @@ fun SettingsScreen(
   // the xemu-based release left its data here: its migration can run again
   val previous by produceState(false) { value = withContext(Dispatchers.IO) { PreviousVersion(context).find() != null } }
   val scope = rememberCoroutineScope()
+
+  var tab by rememberSaveable { mutableStateOf(SettingsTab.GRAPHICS) }
+  val contentScroll = rememberScrollState()
+  LaunchedEffect(tab) { contentScroll.scrollTo(0) }
 
   var folders by remember { mutableStateOf(prefs.gamesFolders) }
   var replacing by remember { mutableStateOf<Uri?>(null) }     /* the folder a pick replaces; null: adds */
@@ -140,240 +183,280 @@ fun SettingsScreen(
     }
   }
   SubScreen(title = stringResource(R.string.settings_title), onBack = onBack, snackbar = snackbar) { padding ->
-    Column(Modifier.padding(padding).fillMaxSize().verticalScroll(rememberScrollState())) {
-      Section(stringResource(R.string.settings_section_games))
-      for (f in folders) {
-        ListItem(
-          headlineContent = { Text(Storage.folderLabel(context, f)) },
-          supportingContent = { Text(Storage.folderPlace(context, f)) },
-          trailingContent = if (folders.size > 1) {
-            { DeleteButton(onClick = { removing = f }, description = stringResource(R.string.settings_games_folder_remove)) }
-          } else {
-            null
-          },
-          modifier = Modifier.clickable {
-            replacing = f
-            pickFolder.launch(f)
-          },
-        )
-      }
-      ActionItem(
-        title = stringResource(R.string.settings_games_folder_add),
-        summary = stringResource(R.string.settings_games_folder_add_desc),
-        icon = Icons.Filled.Add,
+    Column(Modifier.padding(padding).fillMaxSize()) {
+      Row(
+        Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
       ) {
-        replacing = null
-        pickFolder.launch(folders.lastOrNull())
-      }
-
-      Section(stringResource(R.string.settings_section_controls))
-      ListItem(
-        headlineContent = { Text(stringResource(R.string.settings_overlay)) },
-        supportingContent = { Text(stringResource(R.string.settings_overlay_desc)) },
-        modifier = Modifier.clickable(onClick = onEditControls),
-      )
-      ListItem(
-        headlineContent = { Text(stringResource(R.string.controllers_title)) },
-        supportingContent = { Text(stringResource(R.string.controllers_settings_desc)) },
-        modifier = Modifier.clickable(onClick = onControllers),
-      )
-
-      Section(stringResource(R.string.settings_section_display))
-      ListItem(
-        headlineContent = { Text(stringResource(R.string.settings_theme)) },
-        supportingContent = { Text(stringResource(themeLabel(theme))) },
-        modifier = Modifier.clickable { themeDialog = true },
-      )
-      SwitchItem(
-        title = stringResource(R.string.settings_uncap),
-        summary = stringResource(R.string.settings_uncap_desc) + " " +
-          stringResource(R.string.settings_applies_next_start),
-        checked = uncapped,
-        onChange = { uncapped = it; prefs.uncapped = it },
-      )
-      ListItem(
-        headlineContent = { Text(stringResource(R.string.settings_aspect)) },
-        supportingContent = {
-          Text(stringResource(aspectLabel(aspect)) + ". " + stringResource(R.string.settings_applies_next_start))
-        },
-        modifier = Modifier.clickable { aspectDialog = true },
-      )
-      SwitchItem(
-        title = stringResource(R.string.settings_show_fps),
-        summary = stringResource(R.string.settings_show_fps_desc),
-        checked = showFps,
-        onChange = { showFps = it; prefs.showFps = it },
-      )
-      if (BuildConfig.DEBUG) {
-        SwitchItem(
-          title = stringResource(R.string.settings_show_hitches),
-          summary = stringResource(R.string.settings_show_hitches_desc),
-          checked = showHitches,
-          onChange = { showHitches = it; prefs.showHitches = it },
-        )
-      }
-
-      Section(stringResource(R.string.settings_section_console))
-      ListItem(
-        headlineContent = { Text(stringResource(R.string.hdd_title)) },
-        supportingContent = { Text(stringResource(R.string.hdd_settings_desc)) },
-        modifier = Modifier.clickable(onClick = onHardDisk),
-      )
-      if (previous) {
-        ListItem(
-          headlineContent = { Text(stringResource(R.string.settings_migrate)) },
-          supportingContent = { Text(stringResource(R.string.settings_migrate_desc)) },
-          modifier = Modifier.clickable(onClick = onMigrate),
-        )
-      }
-      ListItem(
-        headlineContent = { Text(stringResource(R.string.settings_language)) },
-        supportingContent = {
-          Text(
-            languageLabel(language) + ". " + stringResource(R.string.settings_language_desc)
+        for (t in SettingsTab.entries) {
+          FilterChip(
+            selected = tab == t,
+            onClick = { tab = t },
+            label = { Text(stringResource(t.title)) },
           )
-        },
-        modifier = Modifier.clickable { languageDialog = true },
-      )
-      ListItem(
-        headlineContent = { Text(stringResource(R.string.settings_clock)) },
-        supportingContent = { Text(clockLabel(clockOffset) + ". " + stringResource(R.string.settings_clock_desc)) },
-        modifier = Modifier.clickable { clockDialog = true },
-      )
-      if (BuildConfig.DEBUG) {
-        SwitchItem(
-          title = stringResource(R.string.settings_console_timing),
-          summary = stringResource(R.string.settings_console_timing_desc) + " " +
-            stringResource(R.string.settings_applies_next_start),
-          checked = consoleTiming,
-          onChange = { consoleTiming = it; prefs.consoleTiming = it },
-        )
+        }
       }
-
-      NetworkSettings(prefs, onInsignia)
-
-      Section(stringResource(R.string.settings_section_console_video))
-      Hint(stringResource(R.string.settings_console_video_desc))
-      ListItem(
-        headlineContent = { Text(stringResource(R.string.settings_screen_format)) },
-        supportingContent = { Text(stringResource(formatLabel(format))) },
-        modifier = Modifier.clickable { formatDialog = true },
-      )
-      SwitchItem(
-        title = stringResource(R.string.settings_480p),
-        summary = stringResource(R.string.settings_480p_desc),
-        checked = p480,
-        onChange = { p480 = it; prefs.video480p = it },
-      )
-      SwitchItem(
-        title = stringResource(R.string.settings_720p),
-        summary = stringResource(R.string.settings_720p_desc),
-        checked = p720,
-        onChange = { p720 = it; prefs.video720p = it },
-      )
-      SwitchItem(
-        title = stringResource(R.string.settings_1080i),
-        summary = stringResource(R.string.settings_1080i_desc),
-        checked = i1080,
-        onChange = { i1080 = it; prefs.video1080i = it },
-      )
-      SwitchItem(
-        title = stringResource(R.string.settings_pal60),
-        summary = stringResource(R.string.settings_pal60_desc),
-        checked = pal60,
-        onChange = { pal60 = it; prefs.pal60 = it },
-      )
-      ListItem(
-        headlineContent = { Text(stringResource(R.string.settings_av_cable)) },
-        supportingContent = { Text(stringResource(cableLabel(avPack))) },
-        modifier = Modifier.clickable { cableDialog = true },
-      )
-
-      Section(stringResource(R.string.settings_section_graphics))
-      ListItem(
-        headlineContent = { Text(stringResource(R.string.settings_scale)) },
-        supportingContent = {
-          Text(
-            stringResource(R.string.settings_scale_value, scale) + ". " +
-              stringResource(R.string.settings_applies_next_start)
-          )
-        },
-        modifier = Modifier.clickable { scaleDialog = true },
-      )
-      SwitchItem(
-        title = stringResource(R.string.settings_fxaa),
-        summary = stringResource(R.string.settings_fxaa_desc) + " " +
-          stringResource(R.string.settings_applies_next_start),
-        checked = fxaa,
-        onChange = { fxaa = it; prefs.fxaa = it },
-      )
-      ListItem(
-        headlineContent = { Text(stringResource(R.string.settings_upscale)) },
-        supportingContent = {
-          Text(
-            stringResource(upscaleLabel(upscale)) + ". " + stringResource(R.string.settings_upscale_desc) + " " +
-              stringResource(R.string.settings_applies_next_start)
-          )
-        },
-        modifier = Modifier.clickable { upscaleDialog = true },
-      )
-      SwitchItem(
-        title = stringResource(R.string.settings_async_shaders),
-        summary = stringResource(R.string.settings_async_shaders_desc) + " " +
-          stringResource(R.string.settings_applies_next_start),
-        checked = asyncShaders,
-        onChange = { asyncShaders = it; prefs.asyncShaders = it },
-      )
-      SwitchItem(
-        title = stringResource(R.string.settings_prebuild_shaders),
-        summary = stringResource(R.string.settings_prebuild_shaders_desc) + " " +
-          stringResource(R.string.settings_applies_next_start),
-        checked = prebuildShaders,
-        onChange = { prebuildShaders = it; prefs.prebuildShaders = it },
-      )
-      // other drivers load on Qualcomm's GPU driver interface only (adrenotools): said, not offered, elsewhere
-      val customDrivers = remember { GpuDriverHelper.supportsCustomDriverLoading() }
-      ListItem(
-        headlineContent = { Text(stringResource(R.string.settings_gpu_driver_title)) },
-        supportingContent = { Text(driver) },
-        modifier = Modifier.clickable(enabled = customDrivers, onClick = onGpuDriver),
-      )
-
-      Section(stringResource(R.string.settings_section_updates))
-      ListItem(
-        headlineContent = { Text(stringResource(R.string.settings_update_check)) },
-        supportingContent = {
-          Text(
-            if (updateChecking) stringResource(R.string.settings_update_checking)
-            else stringResource(R.string.settings_update_check_desc, Updates.installedVersion(context))
-          )
-        },
-        modifier = Modifier.clickable(enabled = !updateChecking) {
-          updateChecking = true
-          scope.launch {
-            val found = runCatching { Updates.check(context) }
-            updateChecking = false
-            found.onSuccess { release ->
-              if (release != null) {
-                updateRelease = release
-              } else {
-                snackbar.notify(scope, context.getString(R.string.update_none, Updates.installedVersion(context)))
-              }
-            }.onFailure {
-              snackbar.notify(
-                scope, context.getString(R.string.update_check_failed, it.message ?: it.javaClass.simpleName),
+      Column(
+        Modifier.weight(1f).fillMaxWidth().verticalScroll(contentScroll).padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+      ) {
+        when (tab) {
+          SettingsTab.GRAPHICS -> {
+            SettingsCard(stringResource(R.string.settings_section_graphics)) {
+              ListItem(
+                headlineContent = { Text(stringResource(R.string.settings_scale)) },
+                supportingContent = {
+                  Text(
+                    stringResource(R.string.settings_scale_value, scale) + ". " +
+                      stringResource(R.string.settings_applies_next_start)
+                  )
+                },
+                modifier = Modifier.clickable { scaleDialog = true },
+              )
+              SwitchItem(
+                title = stringResource(R.string.settings_fxaa),
+                summary = stringResource(R.string.settings_fxaa_desc) + " " +
+                  stringResource(R.string.settings_applies_next_start),
+                checked = fxaa,
+                onChange = { fxaa = it; prefs.fxaa = it },
+              )
+              ListItem(
+                headlineContent = { Text(stringResource(R.string.settings_upscale)) },
+                supportingContent = {
+                  Text(
+                    stringResource(upscaleLabel(upscale)) + ". " + stringResource(R.string.settings_upscale_desc) + " " +
+                      stringResource(R.string.settings_applies_next_start)
+                  )
+                },
+                modifier = Modifier.clickable { upscaleDialog = true },
+              )
+              SwitchItem(
+                title = stringResource(R.string.settings_uncap),
+                summary = stringResource(R.string.settings_uncap_desc) + " " +
+                  stringResource(R.string.settings_applies_next_start),
+                checked = uncapped,
+                onChange = { uncapped = it; prefs.uncapped = it },
+              )
+            }
+            SettingsCard(null) {
+              SwitchItem(
+                title = stringResource(R.string.settings_async_shaders),
+                summary = stringResource(R.string.settings_async_shaders_desc) + " " +
+                  stringResource(R.string.settings_applies_next_start),
+                checked = asyncShaders,
+                onChange = { asyncShaders = it; prefs.asyncShaders = it },
+              )
+              SwitchItem(
+                title = stringResource(R.string.settings_prebuild_shaders),
+                summary = stringResource(R.string.settings_prebuild_shaders_desc) + " " +
+                  stringResource(R.string.settings_applies_next_start),
+                checked = prebuildShaders,
+                onChange = { prebuildShaders = it; prefs.prebuildShaders = it },
+              )
+              // other drivers load on Qualcomm's GPU driver interface only (adrenotools): said, not offered, elsewhere
+              val customDrivers = remember { GpuDriverHelper.supportsCustomDriverLoading() }
+              ListItem(
+                headlineContent = { Text(stringResource(R.string.settings_gpu_driver_title)) },
+                supportingContent = { Text(driver) },
+                modifier = Modifier.clickable(enabled = customDrivers, onClick = onGpuDriver),
               )
             }
           }
-        },
-      )
 
-      Section(stringResource(R.string.settings_section_logs))
-      ListItem(
-        headlineContent = { Text(stringResource(R.string.settings_export_logs)) },
-        supportingContent = { Text(stringResource(R.string.settings_export_logs_desc)) },
-        modifier = Modifier.clickable { pickLogsFolder.launch(null) },
-      )
+          SettingsTab.DISPLAY -> {
+            SettingsCard(stringResource(R.string.settings_section_display)) {
+              ListItem(
+                headlineContent = { Text(stringResource(R.string.settings_theme)) },
+                supportingContent = { Text(stringResource(themeLabel(theme))) },
+                modifier = Modifier.clickable { themeDialog = true },
+              )
+              ListItem(
+                headlineContent = { Text(stringResource(R.string.settings_aspect)) },
+                supportingContent = {
+                  Text(stringResource(aspectLabel(aspect)) + ". " + stringResource(R.string.settings_applies_next_start))
+                },
+                modifier = Modifier.clickable { aspectDialog = true },
+              )
+              SwitchItem(
+                title = stringResource(R.string.settings_show_fps),
+                summary = stringResource(R.string.settings_show_fps_desc),
+                checked = showFps,
+                onChange = { showFps = it; prefs.showFps = it },
+              )
+              if (BuildConfig.DEBUG) {
+                SwitchItem(
+                  title = stringResource(R.string.settings_show_hitches),
+                  summary = stringResource(R.string.settings_show_hitches_desc),
+                  checked = showHitches,
+                  onChange = { showHitches = it; prefs.showHitches = it },
+                )
+              }
+            }
+            SettingsCard(stringResource(R.string.settings_section_console_video)) {
+              Hint(stringResource(R.string.settings_console_video_desc))
+              ListItem(
+                headlineContent = { Text(stringResource(R.string.settings_screen_format)) },
+                supportingContent = { Text(stringResource(formatLabel(format))) },
+                modifier = Modifier.clickable { formatDialog = true },
+              )
+              SwitchItem(
+                title = stringResource(R.string.settings_480p),
+                summary = stringResource(R.string.settings_480p_desc),
+                checked = p480,
+                onChange = { p480 = it; prefs.video480p = it },
+              )
+              SwitchItem(
+                title = stringResource(R.string.settings_720p),
+                summary = stringResource(R.string.settings_720p_desc),
+                checked = p720,
+                onChange = { p720 = it; prefs.video720p = it },
+              )
+              SwitchItem(
+                title = stringResource(R.string.settings_1080i),
+                summary = stringResource(R.string.settings_1080i_desc),
+                checked = i1080,
+                onChange = { i1080 = it; prefs.video1080i = it },
+              )
+              SwitchItem(
+                title = stringResource(R.string.settings_pal60),
+                summary = stringResource(R.string.settings_pal60_desc),
+                checked = pal60,
+                onChange = { pal60 = it; prefs.pal60 = it },
+              )
+              ListItem(
+                headlineContent = { Text(stringResource(R.string.settings_av_cable)) },
+                supportingContent = { Text(stringResource(cableLabel(avPack))) },
+                modifier = Modifier.clickable { cableDialog = true },
+              )
+            }
+          }
+
+          SettingsTab.CONSOLE -> {
+            SettingsCard(stringResource(R.string.settings_section_console)) {
+              ListItem(
+                headlineContent = { Text(stringResource(R.string.hdd_title)) },
+                supportingContent = { Text(stringResource(R.string.hdd_settings_desc)) },
+                modifier = Modifier.clickable(onClick = onHardDisk),
+              )
+              if (previous) {
+                ListItem(
+                  headlineContent = { Text(stringResource(R.string.settings_migrate)) },
+                  supportingContent = { Text(stringResource(R.string.settings_migrate_desc)) },
+                  modifier = Modifier.clickable(onClick = onMigrate),
+                )
+              }
+              ListItem(
+                headlineContent = { Text(stringResource(R.string.settings_language)) },
+                supportingContent = {
+                  Text(
+                    languageLabel(language) + ". " + stringResource(R.string.settings_language_desc)
+                  )
+                },
+                modifier = Modifier.clickable { languageDialog = true },
+              )
+              ListItem(
+                headlineContent = { Text(stringResource(R.string.settings_clock)) },
+                supportingContent = { Text(clockLabel(clockOffset) + ". " + stringResource(R.string.settings_clock_desc)) },
+                modifier = Modifier.clickable { clockDialog = true },
+              )
+              if (BuildConfig.DEBUG) {
+                SwitchItem(
+                  title = stringResource(R.string.settings_console_timing),
+                  summary = stringResource(R.string.settings_console_timing_desc) + " " +
+                    stringResource(R.string.settings_applies_next_start),
+                  checked = consoleTiming,
+                  onChange = { consoleTiming = it; prefs.consoleTiming = it },
+                )
+              }
+            }
+            SettingsCard(null) {
+              NetworkSettings(prefs, onInsignia)
+            }
+          }
+
+          SettingsTab.CONTROLS -> {
+            SettingsCard(stringResource(R.string.settings_section_controls)) {
+              ListItem(
+                headlineContent = { Text(stringResource(R.string.settings_overlay)) },
+                supportingContent = { Text(stringResource(R.string.settings_overlay_desc)) },
+                modifier = Modifier.clickable(onClick = onEditControls),
+              )
+              ListItem(
+                headlineContent = { Text(stringResource(R.string.controllers_title)) },
+                supportingContent = { Text(stringResource(R.string.controllers_settings_desc)) },
+                modifier = Modifier.clickable(onClick = onControllers),
+              )
+            }
+          }
+
+          SettingsTab.GAMES -> {
+            SettingsCard(stringResource(R.string.settings_section_games)) {
+              for (f in folders) {
+                ListItem(
+                  headlineContent = { Text(Storage.folderLabel(context, f)) },
+                  supportingContent = { Text(Storage.folderPlace(context, f)) },
+                  trailingContent = if (folders.size > 1) {
+                    { DeleteButton(onClick = { removing = f }, description = stringResource(R.string.settings_games_folder_remove)) }
+                  } else {
+                    null
+                  },
+                  modifier = Modifier.clickable {
+                    replacing = f
+                    pickFolder.launch(f)
+                  },
+                )
+              }
+              ActionItem(
+                title = stringResource(R.string.settings_games_folder_add),
+                summary = stringResource(R.string.settings_games_folder_add_desc),
+                icon = Icons.Filled.Add,
+              ) {
+                replacing = null
+                pickFolder.launch(folders.lastOrNull())
+              }
+            }
+          }
+
+          SettingsTab.UPDATES -> {
+            SettingsCard(stringResource(R.string.settings_section_updates)) {
+              ListItem(
+                headlineContent = { Text(stringResource(R.string.settings_update_check)) },
+                supportingContent = {
+                  Text(
+                    if (updateChecking) stringResource(R.string.settings_update_checking)
+                    else stringResource(R.string.settings_update_check_desc, Updates.installedVersion(context))
+                  )
+                },
+                modifier = Modifier.clickable(enabled = !updateChecking) {
+                  updateChecking = true
+                  scope.launch {
+                    val found = runCatching { Updates.check(context) }
+                    updateChecking = false
+                    found.onSuccess { release ->
+                      if (release != null) {
+                        updateRelease = release
+                      } else {
+                        snackbar.notify(scope, context.getString(R.string.update_none, Updates.installedVersion(context)))
+                      }
+                    }.onFailure {
+                      snackbar.notify(
+                        scope, context.getString(R.string.update_check_failed, it.message ?: it.javaClass.simpleName),
+                      )
+                    }
+                  }
+                },
+              )
+            }
+            SettingsCard(stringResource(R.string.settings_section_logs)) {
+              ListItem(
+                headlineContent = { Text(stringResource(R.string.settings_export_logs)) },
+                supportingContent = { Text(stringResource(R.string.settings_export_logs_desc)) },
+                modifier = Modifier.clickable { pickLogsFolder.launch(null) },
+              )
+            }
+          }
+        }
+      }
     }
   }
 
