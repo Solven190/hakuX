@@ -1,24 +1,33 @@
 package com.rfandango.haku_x.ui.settings
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
 import com.rfandango.haku_x.BuildConfig
 import com.rfandango.haku_x.R
 import com.rfandango.haku_x.data.AppPrefs
@@ -26,7 +35,6 @@ import com.rfandango.haku_x.data.GameOverrides
 import com.rfandango.haku_x.data.GameSetting
 import com.rfandango.haku_x.ui.common.ChoiceDialog
 import com.rfandango.haku_x.ui.common.Hint
-import com.rfandango.haku_x.ui.common.Section
 import com.rfandango.haku_x.ui.common.SubScreen
 
 /** A setting a game can override: its values (as stored) and how they read. */
@@ -83,6 +91,9 @@ fun GameSettingsScreen(gameKey: String, title: String, onBack: () -> Unit) {
     mutableStateMapOf<GameSetting, String?>().apply { GameSetting.entries.forEach { put(it, overrides[it]) } }
   }
   var editing by remember { mutableStateOf<Overridable?>(null) }
+  var tab by rememberSaveable { mutableIntStateOf(0) }
+  val contentScroll = rememberScrollState()
+  LaunchedEffect(tab) { contentScroll.scrollTo(0) }
 
   SubScreen(
     title = stringResource(R.string.game_settings_title),
@@ -98,26 +109,44 @@ fun GameSettingsScreen(gameKey: String, title: String, onBack: () -> Unit) {
       ) { Text(stringResource(R.string.game_settings_reset)) }
     },
   ) { padding ->
-    Column(Modifier.padding(padding).fillMaxSize().verticalScroll(rememberScrollState())) {
-      Hint(stringResource(R.string.game_settings_desc))
-      for ((section, items) in SECTIONS) {
-        Section(stringResource(section))
-        for (item in items) {
-          val own = values[item.setting]
-          ListItem(
-            headlineContent = { Text(stringResource(item.title)) },
-            supportingContent = {
-              if (own != null) {
-                Text(
-                  stringResource(R.string.game_settings_this_game, item.label(own)),
-                  color = MaterialTheme.colorScheme.primary,
-                )
-              } else {
-                Text(stringResource(R.string.game_settings_global, item.label(item.global(prefs))))
-              }
-            },
-            modifier = Modifier.clickable { editing = item },
+    Column(Modifier.padding(padding).fillMaxSize()) {
+      Row(
+        Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+      ) {
+        SECTIONS.forEachIndexed { index, (section, items) ->
+          val changed = items.count { values[it.setting] != null }
+          FilterChip(
+            selected = tab == index,
+            onClick = { tab = index },
+            label = { Text(stringResource(section) + if (changed > 0) " ($changed)" else "") },
           )
+        }
+      }
+      Column(
+        Modifier.weight(1f).fillMaxWidth().verticalScroll(contentScroll).padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+      ) {
+        Hint(stringResource(R.string.game_settings_desc))
+        val (section, items) = SECTIONS[tab.coerceIn(0, SECTIONS.lastIndex)]
+        SettingsCard(stringResource(section)) {
+          for (item in items) {
+            val own = values[item.setting]
+            ListItem(
+              headlineContent = { Text(stringResource(item.title)) },
+              supportingContent = {
+                if (own != null) {
+                  Text(
+                    stringResource(R.string.game_settings_this_game, item.label(own)),
+                    color = MaterialTheme.colorScheme.primary,
+                  )
+                } else {
+                  Text(stringResource(R.string.game_settings_global, item.label(item.global(prefs))))
+                }
+              },
+              modifier = Modifier.clickable { editing = item },
+            )
+          }
         }
       }
     }
