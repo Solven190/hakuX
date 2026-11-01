@@ -12,6 +12,15 @@
 
   <string name="library_search_hint">Search games</string>
   <string name="library_refresh">Refresh</string>
+  <string name="library_title">Library</string>
+  <string name="library_view_options">View options</string>
+  <string name="library_view_title">View</string>
+  <string name="library_view_grid">Grid</string>
+  <string name="library_view_list">List</string>
+  <string name="library_show_info">Show name and ID</string>
+  <string name="library_show_info_desc">Under each cover in Grid, the ID line in List.</string>
+  <string name="library_menu_cover">Custom cover</string>
+  <string name="library_menu_cover_remove">Remove cover</string>
   <string name="library_dashboard">Dashboard</string>
   <string name="library_dashboard_install_title">Install the dashboard</string>
   <string name="library_dashboard_install_text">The Xbox dashboard isn\'t installed. Xbox Live accounts, Insignia\'s, are made and recovered in it. Choose a zip of its files (dashboard 5960: xboxdash.xbe and its folders) to install it on the console\'s C: drive.</string>
