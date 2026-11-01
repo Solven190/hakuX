@@ -13,11 +13,14 @@ import com.rfandango.haku_x.data.AppPrefs
 import com.rfandango.haku_x.data.DiscInfo
 import com.rfandango.haku_x.data.DiscInfoCache
 import com.rfandango.haku_x.data.Game
+import com.rfandango.haku_x.data.GameOverrides
 import com.rfandango.haku_x.data.GameScanner
 import com.rfandango.haku_x.data.Storage
 import com.rfandango.haku_x.data.XisoConverter
 import com.rfandango.haku_x.data.hdd.Dashboard
 import com.rfandango.haku_x.data.hdd.HddStore
+import com.rfandango.haku_x.ui.library.cover.GameCovers
+import com.rfandango.haku_x.ui.library.cover.LibraryPrefs
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.currentCoroutineContext
@@ -53,6 +56,11 @@ data class LibraryState(
   val info: Map<Uri, DiscInfo> = emptyMap(),
   /** The discs' icons, decoded (LibraryViewModel.loadIcons), by the game's URI. */
   val icons: Map<Uri, ImageBitmap> = emptyMap(),
+  /** The covers the user picked, decoded (LibraryViewModel.loadCovers), by the game's URI. */
+  val covers: Map<Uri, ImageBitmap> = emptyMap(),
+  /** The games as a grid of covers (else a list), and whether the cards show each game's name and ID. */
+  val grid: Boolean = true,
+  val showInfo: Boolean = false,
   /** A conversion to XISO: asked, under way, or its outcome. */
   val conversion: Conversion? = null,
   /** The dashboard is on the hard disk's C: (Dashboard): its button starts it, else installs it. */
@@ -120,11 +128,13 @@ data class Conversion(
 
 class LibraryViewModel(app: Application) : AndroidViewModel(app) {
   private val prefs = AppPrefs(app)
+  private val libraryPrefs = LibraryPrefs(app)
+  private val coverStore = GameCovers(app)
   private val discInfo = DiscInfoCache(app)
   private val hddRoot = HddStore(app).root
   private var scanJob: Job? = null
 
-  private val _state = MutableStateFlow(LibraryState())
+  private val _state = MutableStateFlow(LibraryState(grid = libraryPrefs.grid, showInfo = libraryPrefs.showInfo))
   val state: StateFlow<LibraryState> = _state.asStateFlow()
 
   init {
@@ -183,7 +193,10 @@ class LibraryViewModel(app: Application) : AndroidViewModel(app) {
     scanJob?.cancel()
     scanJob = viewModelScope.launch {
       _state.update {
-        it.copy(loading = true, toRead = 0, read = 0, games = emptyList(), info = emptyMap(), icons = emptyMap())
+        it.copy(
+          loading = true, toRead = 0, read = 0, games = emptyList(), info = emptyMap(), icons = emptyMap(),
+          covers = emptyMap(),
+        )
       }
       val ready = withContext(Dispatchers.IO) { folders.filter { Storage.isFolderReady(app, it) } }
       if (ready.isEmpty()) {
@@ -207,12 +220,14 @@ class LibraryViewModel(app: Application) : AndroidViewModel(app) {
         _state.update { it.copy(read = i + 1) }
       }
       val icons = withContext(Dispatchers.IO) { loadIcons(info) }
+      val covers = withContext(Dispatchers.IO) { loadCovers(games, info) }
       _state.update { s ->
         s.copy(
           loading = false,
           games = sorted(games.map { g -> info[g.uri]?.title?.let { g.copy(title = it) } ?: g }),
           info = info.toMap(),
           icons = icons,
+          covers = covers,
         )
       }
     }
@@ -285,7 +300,52 @@ class LibraryViewModel(app: Application) : AndroidViewModel(app) {
 
   fun setQuery(query: String) = _state.update { it.copy(query = query) }
 
+  /** Grid or list: kept for the next start. */
+  fun setGrid(grid: Boolean) {
+    libraryPrefs.grid = grid
+    _state.update { it.copy(grid = grid) }
+  }
+
+  /** The cards' name and ID, shown or not: kept for the next start. */
+  fun setShowInfo(show: Boolean) {
+    libraryPrefs.showInfo = show
+    _state.update { it.copy(showInfo = show) }
+  }
+
+  /** The key a game's cover is kept under: the one its settings and savestates use. */
+  private fun coverKey(game: Game, disc: DiscInfo?) =
+    GameOverrides.gameKey(disc?.titleId ?: 0L, disc?.version ?: 0L, game.relativePath)
+
+  /** The image at uri becomes the game's cover (the long press menu's Custom cover). */
+  fun setCover(game: Game, uri: Uri) {
+    val key = coverKey(game, _state.value.info[game.uri])
+    val resolver = getApplication<Application>().contentResolver
+    viewModelScope.launch {
+      val cover = withContext(Dispatchers.IO) {
+        if (coverStore.save(resolver, uri, key)) coverStore.load(key) else null
+      }
+      if (cover != null) _state.update { it.copy(covers = it.covers + (game.uri to cover)) }
+    }
+  }
+
+  fun removeCover(game: Game) {
+    val key = coverKey(game, _state.value.info[game.uri])
+    viewModelScope.launch {
+      withContext(Dispatchers.IO) { coverStore.delete(key) }
+      _state.update { it.copy(covers = it.covers - game.uri) }
+    }
+  }
+
   private fun sorted(games: List<Game>) = games.sortedBy { it.title.lowercase(Locale.ROOT) }
+
+  /** The games' covers the user picked, decoded off the main thread like the icons. Blocking. */
+  private fun loadCovers(games: List<Game>, info: Map<Uri, DiscInfo>): Map<Uri, ImageBitmap> {
+    val covers = HashMap<Uri, ImageBitmap>()
+    for (game in games) {
+      coverStore.load(coverKey(game, info[game.uri]))?.let { covers[game.uri] = it }
+    }
+    return covers
+  }
 
   /**
    * The disc icons (small PNGs in the disc info cache), decoded once off the
