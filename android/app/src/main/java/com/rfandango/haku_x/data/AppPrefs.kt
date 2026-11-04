@@ -70,6 +70,16 @@ class AppPrefs(context: Context) {
     get() = sp.getBoolean(KEY_SHOW_FPS, true)
     set(value) = sp.edit { putBoolean(KEY_SHOW_FPS, value) }
 
+  /** The library's layout: a grid of covers, else a list. */
+  var libraryGrid: Boolean
+    get() = sp.getBoolean(KEY_LIBRARY_GRID, true)
+    set(value) = sp.edit { putBoolean(KEY_LIBRARY_GRID, value) }
+
+  /** The library's cards show each game's name and ID (in a list, its ID line). */
+  var libraryShowInfo: Boolean
+    get() = sp.getBoolean(KEY_LIBRARY_SHOW_INFO, false)
+    set(value) = sp.edit { putBoolean(KEY_LIBRARY_SHOW_INFO, value) }
+
   /** The library's note recommending a Turnip driver was shown (once: GpuDriverHelper.turnipRecommended). */
   var turnipNoteShown: Boolean
     get() = sp.getBoolean(KEY_TURNIP_NOTE, false)
@@ -187,6 +197,36 @@ class AppPrefs(context: Context) {
     get() = if (sp.contains(KEY_CLOCK_OFFSET)) sp.getLong(KEY_CLOCK_OFFSET, 0L) else null
     set(value) = sp.edit { if (value == null) remove(KEY_CLOCK_OFFSET) else putLong(KEY_CLOCK_OFFSET, value) }
 
+  /** The settings' Graphics tab back to its defaults: a removed key reads as its default. */
+  fun resetGraphics() = sp.edit {
+    remove(NativeCoreActivity.PREF_SCALE)
+    remove(NativeCoreActivity.PREF_FXAA)
+    remove(NativeCoreActivity.PREF_UPSCALE)
+    remove(NativeCoreActivity.PREF_UNCAP)
+    remove(NativeCoreActivity.PREF_ASYNC_SHADERS)
+    remove(NativeCoreActivity.PREF_PREBUILD_SHADERS)
+  }
+
+  /** The settings' Display tab (the picture's shape, the counters, the console's video) back to its defaults. */
+  fun resetDisplay() = sp.edit {
+    remove(NativeCoreActivity.PREF_ASPECT)
+    remove(NativeCoreActivity.PREF_SHOW_HITCHES)
+    remove(KEY_SHOW_FPS)
+    remove(KEY_SCREEN_FORMAT)
+    remove(KEY_480P)
+    remove(KEY_720P)
+    remove(KEY_1080I)
+    remove(KEY_PAL60)
+    remove(KEY_AV_PACK)
+  }
+
+  /** The settings' Console tab's language, clock and drive timing back to their defaults (the network stays). */
+  fun resetConsole() = sp.edit {
+    remove(KEY_LANGUAGE)
+    remove(KEY_CLOCK_OFFSET)
+    remove(KEY_CONSOLE_TIMING)
+  }
+
   /** The game about to run: NativeCoreActivity falls back to dvdUri. */
   fun rememberLaunch(uri: Uri, relativePath: String?, title: String?) {
     sp.edit(commit = true) {
@@ -235,6 +275,8 @@ class AppPrefs(context: Context) {
     private const val KEY_SETUP_COMPLETE = "setup_complete"
     private const val KEY_PREVIOUS_MIGRATED = "previous_version_migrated"
     private const val KEY_SHOW_FPS = "show_fps"
+    private const val KEY_LIBRARY_GRID = "library_grid"
+    private const val KEY_LIBRARY_SHOW_INFO = "library_show_info"
     private const val KEY_CONSOLE_TIMING = "console_timing"
     private const val KEY_THEME = "app_theme"
     private const val KEY_TURNIP_NOTE = "turnip_note_shown"
