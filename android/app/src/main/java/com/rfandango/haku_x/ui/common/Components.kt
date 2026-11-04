@@ -1,5 +1,6 @@
 package com.rfandango.haku_x.ui.common
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -26,6 +27,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -46,8 +48,10 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.InputMode
 import androidx.compose.ui.platform.LocalInputModeManager
@@ -55,6 +59,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.DialogProperties
 import com.rfandango.haku_x.R
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
@@ -148,6 +153,30 @@ fun Hint(text: String, modifier: Modifier = Modifier) {
   )
 }
 
+/** A rounded, outlined group of settings under a coloured title (none: no title). */
+@Composable
+fun SettingsCard(title: String?, content: @Composable ColumnScope.() -> Unit) {
+  OutlinedCard(Modifier.fillMaxWidth(), shape = RoundedCornerShape(28.dp)) {
+    Column(Modifier.padding(vertical = 12.dp)) {
+      if (title != null) {
+        Text(
+          title,
+          style = MaterialTheme.typography.titleMedium,
+          color = MaterialTheme.colorScheme.primary,
+          modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+        )
+      }
+      content()
+    }
+  }
+}
+
+/** A faint line between two settings of a card. */
+@Composable
+fun SettingsDivider() {
+  HorizontalDivider(Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant)
+}
+
 /** A list with nothing in it, in its place. */
 @Composable
 fun EmptyText(text: String) {
@@ -223,7 +252,10 @@ fun rememberFocusOnShow(): FocusRequester {
   return requester
 }
 
-/** A choice of one, as radio buttons (the current one focused for a controller). */
+/**
+ * A choice of one, as radio buttons (the current one focused for a controller). Each choice is a
+ * tall, rounded row, the current one tinted, in a dialog wider than the platform's; a long list scrolls.
+ */
 @Composable
 fun <T> ChoiceDialog(
   title: String,
@@ -233,22 +265,27 @@ fun <T> ChoiceDialog(
   onDismiss: () -> Unit,
 ) {
   val shown = rememberFocusOnShow()
+  val tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
   AlertDialog(
     onDismissRequest = onDismiss,
+    modifier = Modifier.padding(horizontal = 16.dp).fillMaxWidth(),
+    properties = DialogProperties(usePlatformDefaultWidth = false),
     title = { Text(title) },
     text = {
-      Column {
+      Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         for ((value, label) in options) {
           Row(
             Modifier
               .fillMaxWidth()
+              .clip(RoundedCornerShape(16.dp))
+              .background(if (value == current) tint else Color.Transparent)
               .then(if (value == current) Modifier.focusRequester(shown) else Modifier)
               .selectable(selected = value == current, role = Role.RadioButton) { onPick(value) }
-              .padding(vertical = 4.dp),
+              .padding(horizontal = 12.dp, vertical = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
           ) {
             RadioButton(selected = value == current, onClick = null)
-            Text(label, modifier = Modifier.padding(start = 12.dp))
+            Text(label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(start = 14.dp))
           }
         }
       }
