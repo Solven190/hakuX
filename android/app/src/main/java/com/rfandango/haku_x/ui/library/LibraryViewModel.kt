@@ -20,7 +20,6 @@ import com.rfandango.haku_x.data.XisoConverter
 import com.rfandango.haku_x.data.hdd.Dashboard
 import com.rfandango.haku_x.data.hdd.HddStore
 import com.rfandango.haku_x.ui.library.cover.GameCovers
-import com.rfandango.haku_x.ui.library.cover.LibraryPrefs
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.currentCoroutineContext
@@ -128,13 +127,12 @@ data class Conversion(
 
 class LibraryViewModel(app: Application) : AndroidViewModel(app) {
   private val prefs = AppPrefs(app)
-  private val libraryPrefs = LibraryPrefs(app)
   private val coverStore = GameCovers(app)
   private val discInfo = DiscInfoCache(app)
   private val hddRoot = HddStore(app).root
   private var scanJob: Job? = null
 
-  private val _state = MutableStateFlow(LibraryState(grid = libraryPrefs.grid, showInfo = libraryPrefs.showInfo))
+  private val _state = MutableStateFlow(LibraryState(grid = prefs.libraryGrid, showInfo = prefs.libraryShowInfo))
   val state: StateFlow<LibraryState> = _state.asStateFlow()
 
   init {
@@ -302,13 +300,13 @@ class LibraryViewModel(app: Application) : AndroidViewModel(app) {
 
   /** Grid or list: kept for the next start. */
   fun setGrid(grid: Boolean) {
-    libraryPrefs.grid = grid
+    prefs.libraryGrid = grid
     _state.update { it.copy(grid = grid) }
   }
 
   /** The cards' name and ID, shown or not: kept for the next start. */
   fun setShowInfo(show: Boolean) {
-    libraryPrefs.showInfo = show
+    prefs.libraryShowInfo = show
     _state.update { it.copy(showInfo = show) }
   }
 
