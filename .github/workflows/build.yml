@@ -35,7 +35,7 @@ jobs:
           export ANDROID_HOME="$SDK_ROOT"
           export ANDROID_SDK_ROOT="$SDK_ROOT"
           
-          export ANDROID_NDK="$SDK_ROOT/ndk/27.2.12479018"
+          export ANDROID_NDK="$SDK_ROOT/ndk/29.0.14206865"
           export ANDROID_NDK_HOME="$ANDROID_NDK"
 
           echo "ANDROID_HOME=$SDK_ROOT" >> "$GITHUB_ENV"
@@ -48,15 +48,15 @@ jobs:
             "platforms;android-36" \
             "build-tools;36.1.0" \
             "cmake;3.22.1" \
-            "ndk;27.2.12479018"
+            "ndk;29.0.14206865"
 
       - name: Restore CCache
         uses: actions/cache@v4
         with:
           path: ~/.ccache
-          key: ${{ runner.os }}-ccache-v2-${{ github.sha }}
+          key: ${{ runner.os }}-ccache-v3-${{ github.sha }}
           restore-keys: |
-            ${{ runner.os }}-ccache-v2-
+            ${{ runner.os }}-ccache-v3-
 
       - name: Prepare native dependencies
         shell: bash
